@@ -1,10 +1,9 @@
 # Hi i-Realy Apperciated you get me A Donation here_ 1Bu4CR8Bi5AXQG8pnu1avny88C5CCgWKfb /////
 # ===========================================================================================
 # 🔥🐉 DRAGON_CODE_FUTURE — ULTIMATE QUANTUM ECDLP SOLVER (v155) — QISKIT REAL HARDWARE ONLY
-# ===========================================================================================
+# ===========================================================================================#
 #
 # ===========================================================================================
-#
 # COMBINES:
 # - BASIC : Pure Shor's style, geometric QPE, universal post-processing
 # - EXTRA : Regev, fault-tolerance, full range, modern Qiskit API

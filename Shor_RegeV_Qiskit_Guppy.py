@@ -1323,10 +1323,14 @@ def main():
     # =========================================================================
     # QISKIT PATH (token/service/DD/ZNE unchanged from v150)
     # =========================================================================
+    # =========================================================================
+    # QISKIT PATH (token/service/DD/ZNE unchanged from v150)
+    # =========================================================================
     if BACKEND_MODE == "QISKIT":
-        print("\nIBM Quantum Authentication Setup")
-        api_token = input("IBM Quantum API token (Enter if saved): ").strip()
-        crn       = input("IBM Cloud CRN (Enter to skip): ").strip() or None
+        print("\n=== IBM Quantum Real Hardware Setup ===")
+        api_token = input("IBM Quantum API token (press Enter if already saved): ").strip()
+        crn       = input("IBM Cloud CRN (press Enter to skip): ").strip() or None
+
         if api_token:
             try:
                 QiskitRuntimeService.save_account(
@@ -1349,8 +1353,8 @@ def main():
             print("\n🔨 Building Regev circuit...")
             qc, d_used = build_qiskit_regev_circuit(bits, dxs, dys)
 
-        print(qc)
         print("🔍 Drawing circuit...")
+        print(qc)
         qc.draw('mpl', style='iqp', plot_barriers=True, fold=40)
         plt.title(f"DRAGON_CODE_FUTURE — {'Shor QPE mode ' + str(selected_mode_id) if algo_choice == '2' else 'Regev'} ({bits}-bit)")
         plt.tight_layout()
@@ -1363,47 +1367,107 @@ def main():
                 simulator=False,
                 min_num_qubits=qc.num_qubits
             )
+            print(f"🚀 Using REAL IBM hardware: {backend.name} ({backend.num_qubits} qubits)")
         else:
             backend = AerSimulator()
+            print(f"📡 Backend: {backend.name if hasattr(backend, 'name') else str(backend)}")
 
-        backend_name = backend.name if hasattr(backend, 'name') else str(backend)
-        print(f"📡 Backend: {backend_name}")
-
-        pm     = generate_preset_pass_manager(optimization_level=3, backend=backend)
+        # NOTE: routing_method="sabre" — matches reference code exactly
+        pm     = generate_preset_pass_manager(
+                     optimization_level=3,
+                     backend=backend,
+                     routing_method="sabre")
         isa_qc = pm.run(qc)
+        print(f"Transpiled depth: {isa_qc.depth()}")
+        print(f"Transpiled size : {isa_qc.size()}")
+        print(f"Shots: {shots}")
 
         sampler = Sampler(mode=backend)
-        sampler.options.default_shots = shots
+        # NOTE: shots go ONLY in sampler.run() — NOT in sampler.options.default_shots.
+        # Setting default_shots alongside run(shots=) causes conflicts on real hardware.
 
-        # DD — XY4 only, exact same as v150
+        # DD — XY4.  IMPORTANT: dynamic circuits (if_test mid-circuit measure) are
+        # INCOMPATIBLE with DD on real IBM hardware.  Only enable DD for non-dynamic
+        # builds (mode 29 / mode 27 without if_test, or pure Regev).
         USE_DD = input("Enable Dynamical Decoupling XY4? [y/N] → ").lower() == "y"
         if USE_DD:
             sampler.options.dynamical_decoupling.enable        = True
             sampler.options.dynamical_decoupling.sequence_type = "XY4"
 
-        # ZNE — manual 4-scale, exact same as v150
+        # ZNE — manual 4-scale
         USE_ZNE = input("Enable manual 4-scale ZNE? [y/N] → ").lower() == "y"
         if USE_ZNE:
             print("ℹ️  ZNE: manual 4-scale post-job extrapolation will be applied.")
 
         print(f"📡 Submitting job | Shots: {shots}")
-        job    = sampler.run([isa_qc], shots=shots)
-        print(f"   Job ID: {job.job_id()}")
-        print("⏳ Waiting for results...")
-        result = job.result()
-        print("✅ Results received!")
+        job = sampler.run([isa_qc], shots=shots)
+        print(f"Job ID: {job.job_id()}")
+        print("⏳ Waiting for results from quantum hardware...")
 
-        raw_dict = result[0].data.c.get_counts()
-        counts   = Counter(raw_dict)
+        result     = job.result()
+        pub_result = result[0]
 
+        # --- ALWAYS COMBINE CLASSICAL REGISTERS ---
+        # Each QPE build names its classical register differently.
+        # We collect from every register that exists on this result object.
+        counts = Counter()
+        # Named registers — one per known build path
+        if hasattr(pub_result.data, 'c'):
+            counts.update(pub_result.data.c.get_counts())
+        if hasattr(pub_result.data, 'c_phase'):
+            counts.update(pub_result.data.c_phase.get_counts())
+        if hasattr(pub_result.data, 'meas'):
+            counts.update(pub_result.data.meas.get_counts())
+        if hasattr(pub_result.data, 'flag_out'):
+            counts.update(pub_result.data.flag_out.get_counts())
+        if hasattr(pub_result.data, 'flag_c'):
+            counts.update(pub_result.data.flag_c.get_counts())
+        if hasattr(pub_result.data, 'flag_meas'):
+            counts.update(pub_result.data.flag_meas.get_counts())
+        if hasattr(pub_result.data, 'cat_c'):
+            counts.update(pub_result.data.cat_c.get_counts())
+        if hasattr(pub_result.data, 'erasure_c'):
+            counts.update(pub_result.data.erasure_c.get_counts())
+        if hasattr(pub_result.data, 'surf_c'):
+            counts.update(pub_result.data.surf_c.get_counts())
+        # Fallback: iterate all data attributes — catches any register name we missed
+        for attr_name in dir(pub_result.data):
+            if attr_name.startswith('_'):
+                continue
+            attr = getattr(pub_result.data, attr_name, None)
+            if attr is not None and hasattr(attr, 'get_counts'):
+                reg_counts = attr.get_counts()
+                if reg_counts:
+                    counts.update(reg_counts)
+                    print(f"   Collected from register: {attr_name}")
+
+        print(f"📊 Received {len(counts)} unique measurements")
+
+        # --- ZNE multi-register collection (same pattern as above) ---
         if USE_ZNE:
             print("🔬 Applying manual 4-scale ZNE...")
+
+            def _collect_counts(res_item) -> Counter:
+                """Collect from all classical registers on a single result item."""
+                c = Counter()
+                for aname in dir(res_item.data):
+                    if aname.startswith('_'):
+                        continue
+                    attr = getattr(res_item.data, aname, None)
+                    if attr is not None and hasattr(attr, 'get_counts'):
+                        rc = attr.get_counts()
+                        if rc:
+                            c.update(rc)
+                return c
+
             zne_list = [counts]
             for nf in [3, 5, 7]:
-                sc  = max(1024, shots // nf)
-                jz  = sampler.run([isa_qc], shots=sc)
-                rz  = jz.result()
-                zne_list.append(Counter(rz[0].data.c.get_counts()))
+                sc      = max(1024, shots // nf)
+                jz      = sampler.run([isa_qc], shots=sc)
+                rz      = jz.result()
+                zne_combined = _collect_counts(rz[0])
+                zne_list.append(zne_combined)
+
             extrapolated = defaultdict(int)
             for bitstr in zne_list[0]:
                 vals = [c.get(bitstr, 0) for c in zne_list]

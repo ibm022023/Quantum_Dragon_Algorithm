@@ -1151,7 +1151,7 @@ def main():
     # =========================================================================
     print("\nChoose Algorithm:")
     print("  [1] Regev Multi-Dimensional (primary — multi-dim QFT)")
-    print("  [2] Shor's QPE Modes (Top-10 modes — best single-qubit semiclassical)")
+    print("  [2] Shor's QPE Modes (Top-10 modes + Extra single-qubit build )")
     algo_choice = input("Select [1/2] → ").strip() or "1"
 
     # =========================================================================

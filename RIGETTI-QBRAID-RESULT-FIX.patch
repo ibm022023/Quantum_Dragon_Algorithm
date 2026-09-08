@@ -1,0 +1,446 @@
+--- REGEV-QUANTUM-FOUR-PROVIDER-RIGETTI-FIXED-V2.py	2026-09-08 19:45:11.178264484 +0000
++++ /home/user/outputs/REGEV-QUANTUM-FOUR-PROVIDER-RIGETTI-FIXED-V3.py	2026-09-08 19:48:21.330264484 +0000
+@@ -1,7 +1,7 @@
+ #!/usr/bin/env python3
+ # -*- coding: utf-8 -*-
+ """
+-REGEV-QUANTUM-ALGORITHM — UNIFIED FOUR-PROVIDER EDITION (Rigetti fix 2.3)
++REGEV-QUANTUM-ALGORITHM — UNIFIED FOUR-PROVIDER EDITION (Rigetti fix 2.4)
+ 
+ Quantum access choices:
+   1. IBM Quantum       — Qiskit / Qiskit Runtime
+@@ -185,7 +185,7 @@
+     return "\n".join(rows)
+ 
+ 
+-# ─── Rigetti / Open Quantum access (qBraid first, direct fallback) ───────────
++# ─── Rigetti / Open Quantum access (direct + linked qBraid fallback) ─────
+ #
+ # Official routes supported by this file:
+ #   A) qBraid linked-account route (preferred when qBraid imports cleanly)
+@@ -355,7 +355,7 @@
+         + (f" ({OPENQUANTUM_QISKIT_ERROR})" if OPENQUANTUM_QISKIT_ERROR else ""),
+         f"Open Quantum Core SDK preflight: {'OK' if oq_core_ok else 'MISSING/FAILED'}"
+         + (f" ({OPENQUANTUM_CORE_ERROR})" if OPENQUANTUM_CORE_ERROR else ""),
+-        "Selection: qBraid first; direct Open Quantum fallback if qBraid is broken.",
++        "Selection: direct Open Quantum first when SDK credentials exist; otherwise qBraid linked access.",
+     ]
+     if sys.version_info >= (3, 14) and not qbraid_ok:
+         rows.extend([
+@@ -529,7 +529,7 @@
+     # Rigetti Cepheus through the linked qBraid × Open Quantum integration.
+     # The qBraid device ID and Open Quantum short code are intentionally
+     # different identifiers for the same backend.
+-    # auto = qBraid linked route first, then direct Open Quantum fallback.
++    # auto = direct Open Quantum first when credentials exist, otherwise qBraid; either route can fall back.
+     # qbraid = require linked qBraid route; openquantum = require direct route.
+     rigetti_access_mode: str = "auto"
+     qbraid_api_key: str = ""
+@@ -4310,7 +4310,7 @@
+ 
+ 
+ 
+-# ─── Rigetti Cepheus: qBraid linked route + direct Open Quantum fallback ─────
++# ─── Rigetti Cepheus: direct Open Quantum + linked qBraid fallback ───────
+ def _call_or_value(obj: Any, name: str, default: Any = "") -> Any:
+     value = getattr(obj, name, default)
+     if callable(value):
+@@ -4329,8 +4329,24 @@
+         raw = raw[0]
+     if raw is None:
+         raise RuntimeError("Quantum job returned no measurement counts.")
++
++    # Some APIs wrap the map one more time under one of these names.
++    if isinstance(raw, dict):
++        for key in ("measurementCounts", "measurement_counts", "counts"):
++            nested = raw.get(key)
++            if isinstance(nested, dict):
++                raw = nested
++                break
++
++    try:
++        items = dict(raw).items()
++    except Exception as exc:
++        raise RuntimeError(
++            f"Measurement counts have unsupported type {type(raw).__name__}."
++        ) from exc
++
+     counts = Counter()
+-    for key, value in dict(raw).items():
++    for key, value in items:
+         text = str(key).strip()
+         if text.lower().startswith("0x"):
+             text = format(int(text, 16), f"0{max(1, width)}b")
+@@ -4339,28 +4355,105 @@
+             if width:
+                 text = text.zfill(width)
+         counts[text] += int(value)
++    if not counts:
++        raise RuntimeError("Quantum job returned an empty measurement-count map.")
+     return counts
+ 
+ 
+ def _extract_qbraid_counts(result: Any, width: int = 0) -> Counter:
+-    """Normalize current and older qBraid result shapes to Counter[str, int]."""
+-    candidates = [getattr(result, "data", None), result]
+-    for obj in candidates:
+-        if obj is None:
++    """Read qBraid 0.12+ and older result shapes without using deprecated APIs first.
++
++    qBraid's current public shape is ``result.data.get_counts()``.  Linked
++    provider results and REST-shaped payloads can instead expose
++    ``measurement_counts`` or ``resultData.measurementCounts``.  Search those
++    known shapes recursively, but never mistake a failed job's metadata for
++    counts.
++    """
++    queue = [result]
++    seen = set()
++    while queue:
++        obj = queue.pop(0)
++        if obj is None or id(obj) in seen:
+             continue
+-        for method_name in ("get_counts", "measurement_counts"):
+-            attr = getattr(obj, method_name, None)
++        seen.add(id(obj))
++
++        # Preferred current SDK method.
++        get_counts = getattr(obj, "get_counts", None)
++        if callable(get_counts):
++            try:
++                raw = get_counts()
++                if raw:
++                    return _normalize_gate_counts(raw, width)
++            except Exception:
++                pass
++
++        # Current Rigetti result property and common compatibility aliases.
++        for name in ("measurement_counts", "measurementCounts", "counts"):
+             try:
+-                raw = attr() if callable(attr) else attr
++                raw = getattr(obj, name, None)
+             except Exception:
+                 raw = None
+-            if raw:
+-                return _normalize_gate_counts(raw, width)
++            if raw is not None and not callable(raw):
++                try:
++                    if raw:
++                        return _normalize_gate_counts(raw, width)
++                except Exception:
++                    pass
++
++        if isinstance(obj, dict):
++            for name in ("measurementCounts", "measurement_counts", "counts"):
++                raw = obj.get(name)
++                if raw:
++                    try:
++                        return _normalize_gate_counts(raw, width)
++                    except Exception:
++                        pass
++            for name in ("data", "resultData", "result_data", "results"):
++                if name in obj:
++                    queue.append(obj[name])
++        else:
++            for name in ("data", "resultData", "result_data", "results"):
++                try:
++                    nested = getattr(obj, name, None)
++                except Exception:
++                    nested = None
++                if nested is not None:
++                    queue.append(nested)
++
+     raise RuntimeError(
+-        "qBraid job completed, but no measurement counts were found in the result."
++        "qBraid reported a completed job, but its result contained no measurement counts."
+     )
+ 
+ 
++def _job_status_text(job: Any) -> str:
++    """Return a stable uppercase status string for qBraid enum/string variants."""
++    status = _call_or_value(job, "status", "UNKNOWN")
++    value = getattr(status, "value", status)
++    text = str(value or status or "UNKNOWN").upper()
++    # Handles representations such as '<JobStatus.FAILED: \'FAILED\'>'.
++    for known in ("FAILED", "CANCELLED", "CANCELED", "COMPLETED", "DONE", "ERROR"):
++        if known in text:
++            return known
++    return text
++
++
++def _qbraid_job_diagnostics(job: Any) -> str:
++    """Best-effort server failure details, bounded so logs stay readable."""
++    details = []
++    for name in ("metadata", "details"):
++        attr = getattr(job, name, None)
++        try:
++            value = attr() if callable(attr) else attr
++        except Exception:
++            value = None
++        if value:
++            try:
++                rendered = json.dumps(value, default=str, ensure_ascii=False)
++            except Exception:
++                rendered = repr(value)
++            details.append(f"{name}={rendered[:3000]}")
++    return "; ".join(details)
++
+ def _has_unsupported_openquantum_dynamic_ops(qc: QuantumCircuit) -> List[str]:
+     """Return dynamic operations unsupported by the terminal-measurement route."""
+     problems: List[str] = []
+@@ -4525,32 +4618,90 @@
+     return prepared
+ 
+ 
++def _flatten_rigetti_registers(qc: QuantumCircuit) -> QuantumCircuit:
++    """Rebuild ``qc`` with exactly one quantum and one classical register.
++
++    Open Quantum's Rigetti QASM precompiler currently accepts at most one
++    qubit register.  Qiskit preserves source register boundaries during QASM3
++    export, so a circuit assembled from z0/z1/.../tgt/cat registers is rejected
++    even though its operations are valid.  Composing into an integer-sized
++    QuantumCircuit produces one ``q`` register and one ``c`` register while
++    preserving qubit/clbit order and terminal measurements.
++    """
++    flat = QuantumCircuit(qc.num_qubits, qc.num_clbits, name="rigetti_flat")
++    flat.compose(qc, qubits=flat.qubits, clbits=flat.clbits, inplace=True)
++    flat.metadata = dict(getattr(qc, "metadata", None) or {})
++    return flat
++
++
++def _validate_rigetti_terminal_circuit(qc: QuantumCircuit) -> None:
++    problems = _has_unsupported_openquantum_dynamic_ops(qc)
++    if problems:
++        raise RuntimeError(
++            "Rigetti/Open Quantum accepts this program only as a terminal-"
++            "measurement circuit. Unsupported operations: "
++            + ", ".join(problems)
++        )
++    resets = [
++        item for item in qc.data
++        if getattr(item.operation, "name", "").lower() == "reset"
++    ]
++    if resets:
++        raise RuntimeError(
++            "Rigetti/Open Quantum does not support reset instructions. "
++            "Use Regev-only mode; IPE/Shor reset/feed-forward circuits cannot "
++            "be submitted through the current QASM pipeline."
++        )
++
++
++def _rigetti_qasm3_payload(qc: QuantumCircuit) -> Tuple[QuantumCircuit, str]:
++    """Flatten registers and export validated one-qreg OpenQASM 3 text."""
++    flat = _flatten_rigetti_registers(qc)
++    _validate_rigetti_terminal_circuit(flat)
++    try:
++        from qiskit import qasm3
++        payload = qasm3.dumps(flat)
++    except Exception as exc:
++        raise RuntimeError(f"Could not export the Rigetti circuit as QASM3: {exc}") from exc
++
++    import re as _re
++    qdecls = _re.findall(r"(?m)^\s*qubit(?:\s*\[[^\]]+\])?\s+[A-Za-z_]\w*\s*;", payload)
++    if len(qdecls) != 1:
++        raise RuntimeError(
++            f"Internal Rigetti QASM check failed: expected exactly one qubit "
++            f"register declaration, found {len(qdecls)}."
++        )
++    if _re.search(r"(?m)^\s*reset\b", payload):
++        raise RuntimeError("Internal Rigetti QASM check failed: payload contains reset.")
++    logger.info(
++        "Rigetti QASM3 payload: one qubit register, %s qubits, %s classical bits, %s bytes",
++        flat.num_qubits, flat.num_clbits, len(payload.encode("utf-8")),
++    )
++    return flat, payload
++
++
+ def _run_rigetti_via_qbraid(qc: QuantumCircuit, cfg: P11Config) -> Counter:
+-    """Run via the linked qBraid -> Open Quantum integration."""
++    """Run via linked qBraid -> Open Quantum using explicit one-qreg QASM3."""
+     if not _load_qbraid_provider():
+         raise RuntimeError(
+             "qBraid Runtime import failed: " +
+             (QBRAID_RUNTIME_ERROR or "unknown import error")
+         )
+     api_key = cfg.qbraid_api_key or os.getenv("QBRAID_API_KEY", "")
+-    if api_key:
+-        provider = QbraidProvider(api_key=api_key)
+-    else:
+-        # qBraid Lab can auto-detect the signed-in account.  A local/Codespaces
+-        # environment normally needs QBRAID_API_KEY.
+-        provider = QbraidProvider()
++    provider = QbraidProvider(api_key=api_key) if api_key else QbraidProvider()
+ 
+     device_id = cfg.qbraid_openquantum_device
+     device = provider.get_device(device_id)
+     status = _call_or_value(device, "status", "unknown")
+     logger.info("qBraid/Open Quantum device: %s; status=%s", device_id, status)
+ 
+-    # Linked-account submission needs only the qBraid key.  Open Quantum account
+-    # selection, billing, final transpilation and routing happen behind qBraid.
+-    # Keep the call to the exact documented minimum to avoid version-specific
+-    # runtime option mismatches.
+-    submitted_qc = _prepare_rigetti_qiskit_circuit(qc)
+-    job = device.run(submitted_qc, shots=int(cfg.shots))
++    # Do not give the Qiskit object to qBraid here.  Its generic conversion can
++    # preserve all source QuantumRegisters and emit QASM rejected by OQ with
++    # "At most one qubit register allowed".  Export our verified flat QASM3
++    # string instead; raw QASM3 is a first-class qBraid program type.
++    prepared_qc = _prepare_rigetti_qiskit_circuit(qc)
++    flat_qc, qasm3_payload = _rigetti_qasm3_payload(prepared_qc)
++    job = device.run(qasm3_payload, shots=int(cfg.shots))
+     cfg.last_job_id = str(
+         _call_or_value(job, "id", "") or _call_or_value(job, "job_id", "") or ""
+     )
+@@ -4562,8 +4713,17 @@
+     wait = getattr(job, "wait_for_final_state", None)
+     if callable(wait):
+         wait()
++    final_status = _job_status_text(job)
++    logger.info("qBraid/Open Quantum final job status: %s", final_status)
++    if final_status in ("FAILED", "ERROR", "CANCELLED", "CANCELED"):
++        diagnostics = _qbraid_job_diagnostics(job)
++        raise RuntimeError(
++            f"qBraid/Open Quantum job {cfg.last_job_id or '<unknown>'} ended as "
++            f"{final_status}." + (f" Server details: {diagnostics}" if diagnostics else "")
++        )
++
+     result = job.result()
+-    counts = _extract_qbraid_counts(result, qc.num_clbits)
++    counts = _extract_qbraid_counts(result, flat_qc.num_clbits)
+     logger.info(
+         "Rigetti via qBraid result: %s outcomes, %s shots",
+         len(counts), sum(counts.values()),
+@@ -4619,6 +4779,12 @@
+             cfg.openquantum_backend,
+         )
+         submitted_qc = _prepare_rigetti_qiskit_circuit(qc, backend=backend)
++        submitted_qc = _flatten_rigetti_registers(submitted_qc)
++        _validate_rigetti_terminal_circuit(submitted_qc)
++        logger.info(
++            "Direct Open Quantum payload flattened to one register: %sq/%sc",
++            submitted_qc.num_qubits, submitted_qc.num_clbits,
++        )
+         job = backend.run(submitted_qc, shots=int(cfg.shots))
+         cfg.last_job_id = str(
+             _call_or_value(job, "job_id", "") or _call_or_value(job, "id", "") or ""
+@@ -4626,7 +4792,7 @@
+         print(f"[Rigetti/OpenQuantum-direct] Job ID: {cfg.last_job_id or 'unavailable'}")
+         result = job.result()
+         raw = result.get_counts()
+-        counts = _normalize_gate_counts(raw, qc.num_clbits)
++        counts = _normalize_gate_counts(raw, submitted_qc.num_clbits)
+         logger.info(
+             "Rigetti via direct Open Quantum result: %s outcomes, %s shots",
+             len(counts), sum(counts.values()),
+@@ -4639,7 +4805,7 @@
+ 
+ 
+ def run_rigetti_qbraid_openquantum(qc: QuantumCircuit, cfg: P11Config) -> Counter:
+-    """Run Cepheus using qBraid first, with a direct OQ fallback in auto mode."""
++    """Run Cepheus directly when configured, with linked qBraid fallback."""
+     if not QISKIT_OK:
+         raise RuntimeError("Qiskit is required for Rigetti Cepheus access.")
+     dynamic_ops = _has_unsupported_openquantum_dynamic_ops(qc)
+@@ -4667,32 +4833,29 @@
+     if mode == "openquantum":
+         return _run_rigetti_via_openquantum(qc, cfg)
+ 
+-    # AUTO: prefer the linked qBraid route when it imports and a key is present
+-    # (or qBraid Lab may auto-detect credentials); otherwise use the direct OQ
+-    # Qiskit plugin.  If qBraid submission itself fails, direct OQ is attempted.
++    # AUTO: if direct Open Quantum credentials are configured, prefer the
++    # official Qiskit plugin (fewer translation layers).  If direct execution
++    # fails and qBraid is available, retry through the linked-account route.
++    # Without direct credentials, use qBraid; linked OQ jobs are billed against
++    # Open Quantum credits, not qBraid credits.
+     qbraid_key = cfg.qbraid_api_key or os.getenv("QBRAID_API_KEY", "")
+     qbraid_ready = _load_qbraid_provider()
+     oq_ready = _load_openquantum_qiskit() and bool(all(_openquantum_credentials(cfg)))
+ 
+-    if qbraid_ready and qbraid_key:
++    if oq_ready:
+         try:
+-            return _run_rigetti_via_qbraid(qc, cfg)
++            return _run_rigetti_via_openquantum(qc, cfg)
+         except Exception as exc:
+-            if not oq_ready:
++            if not qbraid_ready or not qbraid_key:
+                 raise
+             logger.warning(
+-                "qBraid Rigetti route failed (%s: %s); trying direct Open Quantum.",
++                "Direct Open Quantum Rigetti route failed (%s: %s); trying linked qBraid.",
+                 type(exc).__name__, exc,
+             )
+-            return _run_rigetti_via_openquantum(qc, cfg)
++            return _run_rigetti_via_qbraid(qc, cfg)
+ 
+-    if oq_ready:
+-        if not qbraid_ready:
+-            logger.warning(
+-                "qBraid import is unavailable (%s); using direct Open Quantum Qiskit.",
+-                QBRAID_RUNTIME_ERROR or "unknown error",
+-            )
+-        return _run_rigetti_via_openquantum(qc, cfg)
++    if qbraid_ready and qbraid_key:
++        return _run_rigetti_via_qbraid(qc, cfg)
+ 
+     if qbraid_ready:
+         # Allows qBraid Lab's automatic credential detection.
+@@ -5825,7 +5988,7 @@
+                 "qBraid linked access or the Open Quantum Qiskit plugin.\n"
+                 + rigetti_integration_report()
+             )
+-        cfg.quantum_access = "rigetti_auto_qbraid_then_openquantum"
++        cfg.quantum_access = "rigetti_auto_openquantum_then_qbraid"
+         cfg.backend = "rigetti"
+         cfg.sdk = "qiskit"
+     else:
+@@ -5955,7 +6118,7 @@
+         ).strip()
+     elif cfg.backend == "rigetti":
+         print("Rigetti access mode:")
+-        print("  auto        — qBraid linked route first, direct Open Quantum fallback")
++        print("  auto        — direct Open Quantum first when credentials exist; qBraid fallback")
+         print("  qbraid      — require qBraid linked route")
+         print("  openquantum — require direct Open Quantum Qiskit route")
+         cfg.rigetti_access_mode = (
+@@ -5968,26 +6131,33 @@
+         if cfg.rigetti_access_mode not in ("auto", "qbraid", "openquantum"):
+             raise ValueError("Mode must be auto, qbraid, or openquantum.")
+ 
++        import getpass as _getpass
+         print("\nqBraid linked route: link Open Quantum once in your qBraid profile.")
++        print("Linked Open Quantum jobs use Open Quantum credits; qBraid credits are not required.")
+         print("Only the qBraid API key is sent to qBraid; never the OQ client secret.")
+-        cfg.qbraid_api_key = os.getenv("QBRAID_API_KEY", "") or input(
++        cfg.qbraid_api_key = os.getenv("QBRAID_API_KEY", "") or _getpass.getpass(
+             "qBraid API key [optional in qBraid Lab / direct mode]: "
+         ).strip()
+ 
+         print("\nDirect Open Quantum route/fallback:")
+         print("The s_... SDK value is the Client ID and must be paired with its secret.")
+-        need_oq = cfg.rigetti_access_mode == "openquantum" or not _load_qbraid_provider()
+         cfg.openquantum_client_id = os.getenv("OPENQUANTUM_CLIENT_ID", "")
+-        if not cfg.openquantum_client_id and need_oq:
++        if not cfg.openquantum_client_id and cfg.rigetti_access_mode != "qbraid":
+             cfg.openquantum_client_id = input(
+-                "Open Quantum SDK Client ID (s_...): "
++                "Open Quantum SDK Client ID [optional in auto mode] (s_...): "
+             ).strip()
+-        import getpass as _getpass
+         cfg.openquantum_client_secret = os.getenv("OPENQUANTUM_CLIENT_SECRET", "")
+-        if not cfg.openquantum_client_secret and need_oq:
++        if cfg.openquantum_client_id and not cfg.openquantum_client_secret:
+             cfg.openquantum_client_secret = _getpass.getpass(
+                 "Open Quantum Client Secret: "
+             ).strip()
++        if cfg.rigetti_access_mode == "openquantum" and not (
++            cfg.openquantum_client_id and cfg.openquantum_client_secret
++        ):
++            raise RuntimeError(
++                "openquantum mode requires both OPENQUANTUM_CLIENT_ID and "
++                "OPENQUANTUM_CLIENT_SECRET."
++            )
+         cfg.openquantum_organization_id = os.getenv(
+             "OPENQUANTUM_ORGANIZATION_ID", ""
+         ) or input("Open Quantum organization UUID [optional/auto]: ").strip()

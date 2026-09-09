@@ -7497,9 +7497,9 @@ def run_selene(qc, cfg):
 
 BACKEND_RUNNERS = {
     "aer": run_aer,
-    "ibm": run_ibm,
-    "iqm": run_iqm,
-    "origin": run_origin,
+    "ibm": run_ibm_hardware,              # ✅ exists at line ~3998
+    "iqm": run_iqm_hardware,              # ✅ exists at line ~4472
+    "origin": run_origin_quantum_circuit, # ✅ exists at line ~2886
     "tket": run_tket,
     "pennylane": run_pennylane,
     "cirq": run_cirq,

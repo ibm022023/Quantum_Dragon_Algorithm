@@ -726,7 +726,7 @@ class P11Config:
     # ── SDK / backend ────────────────────────────────────────────────────────
     sdk: str = "qiskit"
     backend: str = "ibm"  # ibm | iqm | origin
-    quantum_access: str = "ibm_qiskit"
+    quantum_access: str = "ibm_cloud"
     shots: int = 16384
     n_runs: int = 1                   # multi-run sample accumulation for Regev
     ibm_token: str = ""
@@ -4037,7 +4037,7 @@ def run_ibm_hardware(qc: QuantumCircuit, cfg: P11Config) -> Counter:
     if not token:
         token = input("Enter IBM Quantum API token: ").strip()
 
-    service      = QiskitRuntimeService(channel="ibm_quantum_platform",
+    service      = QiskitRuntimeService(channel="ibm_cloud",
                                          token=token, instance=crn or None)
     backend_name = cfg.ibm_backend or "ibm_fez"
     backend      = service.backend(backend_name)
@@ -6182,7 +6182,7 @@ def _ensure_ibm_login(cfg, force_interactive: bool = False) -> bool:
     if token:
         try:
             QiskitRuntimeService.save_account(
-                channel="ibm_quantum",
+                channel="ibm_cloud",
                 token=token,
                 overwrite=True
             )
@@ -6213,14 +6213,14 @@ def _ensure_ibm_login(cfg, force_interactive: bool = False) -> bool:
     print("    1. Click the URL above to log in to IBM Quantum.")
     print("    2. Go to your Account → API Token.")
     print("    3. Copy the token and paste it below (hidden).")
-    print("    4. For IBM Cloud (not ibm_quantum), also paste your CRN.")
+    print("    4. For IBM Cloud (not ibm_quantum_platform), also paste your CRN.")
     print("=" * 72)
 
     token = _input_hidden("  IBM Quantum API token (hidden, press ENTER to skip): ")
     if token:
         crn = input("  IBM Cloud CRN (Enter to skip, only for cloud channel): ").strip() or None
         try:
-            channel = "ibm_cloud" if crn else "ibm_quantum"
+            channel = "ibm_cloud" if crn else "ibm_quantum_platform"
             QiskitRuntimeService.save_account(
                 channel=channel,
                 token=token,
@@ -6518,58 +6518,100 @@ def _ensure_pasqal_login(cfg, force_interactive: bool = False) -> bool:
 
 def _print_backend_table(backends: list, title: str = "Available Backends"):
     """Pretty-print a table of backends with status, qubits, and queue info."""
-    print("\n" + "=" * 90)
-    print(f"  {title}")
-    print("=" * 90)
+    print("\n" + "=" * 96)
+    print(f"  🔍 {title}")
+    print("=" * 96)
     if not backends:
         print("  No backends found or authentication required.")
-        print("=" * 90)
+        print("=" * 96)
         return
-    header = f"  {'#':<4} {'Name':<30} {'Status':<12} {'Qubits':<8} {'Pending Jobs':<14} {'Type':<12}"
+    header = f"  {'#':<4} {'Name':<30} {'Status':<14} {'Qubits':<8} {'Pending Jobs':<14} {'Type':<12}"
     print(header)
-    print("  " + "-" * 86)
+    print("  " + "-" * 92)
     for i, b in enumerate(backends, 1):
         name = b.get('name', 'N/A')[:28]
-        status = b.get('status', 'unknown')[:10]
+        status_raw = b.get('status', 'unknown').lower()
+        if status_raw in ('online', 'active', 'available', 'true', 'up'):
+            status = "🟢 online"
+        elif status_raw in ('offline', 'down', 'unavailable', 'maintenance', 'false'):
+            status = "🔴 offline"
+        else:
+            status = "⚪ unknown"
         qubits = str(b.get('qubits', 'N/A'))[:6]
         pending = str(b.get('pending_jobs', 'N/A'))[:12]
         btype = b.get('type', 'QPU')[:10]
         marker = " ★" if b.get('recommended', False) else ""
-        print(f"  {i:<4} {name:<30} {status:<12} {qubits:<8} {pending:<14} {btype:<12}{marker}")
-    print("=" * 90)
-    print("  ★ = Recommended default")
-    print("  Enter a number to select, or press ENTER to use the recommended default (★).")
-    print("=" * 90)
+        print(f"  {i:<4} {name:<30} {status:<14} {qubits:<8} {pending:<14} {btype:<12}{marker}")
+    print("=" * 96)
+    print("  ★ = Recommended default (based on latest official documentation)")
+    print("  You MUST select a backend by entering its number above.")
+    print("=" * 96)
 
 
-def _choose_backend(backends: list, default_name: str) -> str:
-    """Let the user choose a backend from the list, or return the default."""
-    if not backends:
-        print(f"  No backends discovered — using default: {default_name}")
-        return default_name
-    _print_backend_table(backends)
+def _choose_backend(backends: list, default_name: str, platform: str = "") -> str:
+    """Let the user choose a backend from the list, or manually enter one.
+
+    If discovery fails (backends empty), the user is prompted to type a backend
+    name manually instead of silently auto-selecting the default.
+    """
+    plat_label = platform.upper() if platform else "PLATFORM"
+
+    # ── Case 1: Discovery returned backends → show table and let user pick ──
+    if backends:
+        _print_backend_table(backends)
+        if not _is_interactive():
+            print(f"  Non-interactive mode — using default: {default_name}")
+            return default_name
+        while True:
+            choice = input(
+                f"  Select {plat_label} backend [1-{len(backends)}]"
+                f" or type a custom name [{default_name}]: "
+            ).strip()
+            if not choice:
+                print(f"  ⚠️  Please enter a number (1-{len(backends)}) or a backend name.")
+                continue
+            try:
+                idx = int(choice) - 1
+                if 0 <= idx < len(backends):
+                    selected = backends[idx].get('name', default_name)
+                    print(f"  ✅ Selected: {selected}")
+                    return selected
+                else:
+                    print(f"  ⚠️  Please enter a number between 1 and {len(backends)}.")
+            except ValueError:
+                # User typed a custom backend name — accept it directly
+                print(f"  ✅ Using custom backend: {choice}")
+                return choice
+
+    # ── Case 2: Discovery failed → force manual entry, no auto-default ──
+    print("=" * 78)
+    print(f"  ⚠️  {plat_label} backend discovery failed")
+    print(f"  Could not retrieve the live backend list from {plat_label}.")
+    print(f"  This usually means:")
+    print(f"    • The API token is invalid or expired")
+    print(f"    • Network connectivity issues")
+    print(f"    • The provider service is temporarily down")
+    print("=" * 78)
+
     if not _is_interactive():
-        print(f"  Non-interactive mode — using default: {default_name}")
+        print(f"  Non-interactive mode — falling back to default: {default_name}")
         return default_name
-    choice = input("  Select backend [# or ENTER for default]: ").strip()
-    if not choice:
-        print(f"  Using default: {default_name}")
-        return default_name
-    try:
-        idx = int(choice) - 1
-        if 0 <= idx < len(backends):
-            selected = backends[idx].get('name', default_name)
-            print(f"  ✅ Selected: {selected}")
-            return selected
-    except ValueError:
-        pass
-    # Try matching by name substring
-    for b in backends:
-        if choice.lower() in b.get('name', '').lower():
-            print(f"  ✅ Matched: {b['name']}")
-            return b['name']
-    print(f"  Invalid selection — using default: {default_name}")
-    return default_name
+
+    while True:
+        manual = input(
+            f"  Enter {plat_label} backend name manually [{default_name}]: "
+        ).strip()
+        if manual:
+            print(f"  ✅ Using manually entered backend: {manual}")
+            return manual
+        # Empty input — show the default but still require confirmation
+        confirm = input(
+            f"  Use default '{default_name}'? [Y/n]: "
+        ).strip().lower()
+        if confirm in ("", "y", "yes"):
+            print(f"  ✅ Using default backend: {default_name}")
+            return default_name
+        print(f"  Please enter a backend name or confirm the default.")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -6580,7 +6622,19 @@ def _list_ibm_backends(cfg) -> list:
     """List available IBM Quantum backends with status and queue info."""
     try:
         from qiskit_ibm_runtime import QiskitRuntimeService
-        service = QiskitRuntimeService()
+        token = getattr(cfg, 'ibm_token', '') or os.getenv('IBM_QUANTUM_TOKEN', '')
+        if token:
+            try:
+                QiskitRuntimeService.save_account(
+                    channel="ibm_cloud",
+                    token=token,
+                    overwrite=True,
+                )
+            except Exception:
+                pass  # account may already exist or save not supported
+            service = QiskitRuntimeService(channel="ibm_cloud", token=token)
+        else:
+            service = QiskitRuntimeService()
         backends = []
         # 2025-2026 IBM Quantum backend names (verified from docs)
         known_ibm_backends = [
@@ -7211,6 +7265,7 @@ def choose_backend_for_platform(platform: str, cfg) -> str:
     """Discover and let the user choose a backend for the given platform.
 
     Returns the selected backend name (or default if discovery fails).
+    IMPORTANT: Does NOT overwrite cfg.backend (used as dispatcher key).
     """
     lister = PLATFORM_BACKEND_LISTERS.get(platform)
     if not lister:
@@ -7220,7 +7275,7 @@ def choose_backend_for_platform(platform: str, cfg) -> str:
     print(f"\n🔍 Discovering available backends for platform: {platform.upper()}")
     backends = lister(cfg)
 
-    # Determine the default based on platform
+    # Determine the default based on platform (from official docs)
     defaults = {
         "ibm": "ibm_brisbane",
         "iqm": "emerald",
@@ -7244,17 +7299,56 @@ def choose_backend_for_platform(platform: str, cfg) -> str:
         "nexus": "H2-1E",
         "quantinuum": "H2-1E",
     }
-    default = defaults.get(platform, getattr(cfg, 'backend', '') or getattr(cfg, 'device', '') or getattr(cfg, 'solver', ''))
+    default = defaults.get(platform, '')
 
-    selected = _choose_backend(backends, default)
+    # Get current config value as fallback if default is empty
+    if not default:
+        default = getattr(cfg, 'backend', '') or getattr(cfg, 'device', '') or getattr(cfg, 'solver', '')
 
-    # Store the selection back into cfg for the runner to use
-    if platform in ("dwave", "dwave_hybrid", "dwave_neal"):
+    selected = _choose_backend(backends, default, platform=platform)
+
+    # Store selection in PLATFORM-SPECIFIC field only — NEVER overwrite cfg.backend
+    # (cfg.backend is the dispatcher key: "ibm" | "iqm" | "origin" | ...)
+    if platform == "ibm":
+        cfg.ibm_backend = selected
+    elif platform == "iqm":
+        cfg.iqm_device = selected
+    elif platform == "origin":
+        cfg.origin_device = selected
+    elif platform == "rigetti":
+        cfg.openquantum_backend = selected
+    elif platform in ("dwave", "dwave_hybrid", "dwave_neal"):
         cfg.dwave_solver = selected
-    elif platform in ("helios", "selene", "nexus", "quantinuum"):
+    elif platform == "braket":
+        cfg.backend = "braket"  # keep dispatcher key
+    elif platform == "helios":
         cfg.helios_system_name = selected
-    else:
-        cfg.backend = selected
+    elif platform == "selene":
+        cfg.helios_system_name = selected
+    elif platform == "nexus":
+        cfg.helios_system_name = selected
+    elif platform == "quantinuum":
+        cfg.helios_system_name = selected
+    elif platform == "pennylane":
+        cfg.backend = "pennylane"
+    elif platform == "cirq":
+        cfg.backend = "cirq"
+    elif platform == "cudaq":
+        cfg.backend = "cudaq"
+    elif platform == "bluequbit":
+        cfg.backend = "bluequbit"
+    elif platform == "xanadu":
+        cfg.xanadu_device = selected
+    elif platform == "quera":
+        cfg.backend = "quera"
+    elif platform == "pasqal":
+        cfg.backend = "pasqal"
+    elif platform == "qrisp":
+        cfg.backend = "qrisp"
+    elif platform == "tket":
+        cfg.backend = "tket"
+    elif platform == "aer":
+        cfg.backend = "aer"
 
     return selected
 
@@ -8632,7 +8726,7 @@ def interactive_menu() -> P11Config:
             raise RuntimeError("IBM-Qiskit selected, but Qiskit is not installed.")
         if not IBM_OK:
             raise RuntimeError("IBM-Qiskit selected, but qiskit-ibm-runtime is not installed.")
-        cfg.quantum_access = "ibm_qiskit"
+        cfg.quantum_access = "ibm_cloud"
         cfg.backend = "ibm"
         cfg.sdk = "qiskit"
 
@@ -9384,7 +9478,7 @@ def retrieve_ibm_job(job_id: str, wait: bool, timeout_s: int, poll_s: int,
     if not IBM_OK:
         raise RuntimeError("qiskit-ibm-runtime is not installed.")
     service = QiskitRuntimeService(
-        channel="ibm_quantum_platform", token=token, instance=crn or None
+        channel="ibm_cloud", token=token, instance=crn or None
     )
     job = service.job(job_id)
     _wait_sdk_job(job, wait, timeout_s, poll_s, "IBM")
@@ -10297,9 +10391,9 @@ def cfg_from_cli_args(args) -> P11Config:
         cfg.rigetti_access_mode = args.access  # legacy alias used by Rigetti path
         # For IQM, the access arg is stored but the IQM runner uses its own logic
     if args.platform == "ibm":
-        cfg.quantum_access = "ibm_qiskit"
+        cfg.quantum_access = "ibm_cloud"
     elif args.platform == "iqm":
-        cfg.quantum_access = "iqm_qiskit"
+        cfg.quantum_access = "iqm_cloud"
     elif args.platform == "origin":
         cfg.quantum_access = "origin"
     elif args.platform == "rigetti":

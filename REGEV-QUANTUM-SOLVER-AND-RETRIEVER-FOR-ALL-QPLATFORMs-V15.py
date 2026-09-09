@@ -6194,8 +6194,7 @@ def _ensure_ibm_login(cfg, force_interactive: bool = False) -> bool:
     print("  IBM QUANTUM AUTHENTICATION REQUIRED")
     print("=" * 72)
     _open_browser("https://quantum.ibm.com/", "Opening IBM Quantum login...")
-    print("
-  STEP-BY-STEP:")
+    print("STEP-BY-STEP:")
     print("    1. Click the URL above to log in to IBM Quantum.")
     print("    2. Go to your Account → API Token.")
     print("    3. Copy the token and paste it below (hidden).")
@@ -6278,8 +6277,7 @@ def _ensure_braket_login(cfg, force_interactive: bool = False) -> bool:
     print("  AWS BRAKET AUTHENTICATION REQUIRED")
     print("=" * 72)
     _open_browser("https://aws.amazon.com/braket/", "Opening AWS Braket...")
-    print("
-  STEP-BY-STEP:")
+    print("STEP-BY-STEP:")
     print("    1. Ensure you have an AWS account with Braket access.")
     print("    2. Run 'aws configure' in your terminal, OR")
     print("    3. Paste your AWS Access Key ID and Secret Access Key below.")
@@ -6335,8 +6333,7 @@ def _ensure_bluequbit_login(cfg, force_interactive: bool = False) -> bool:
     print("  BLUEQUBIT AUTHENTICATION REQUIRED")
     print("=" * 72)
     _open_browser("https://app.bluequbit.io/", "Opening BlueQubit...")
-    print("
-  STEP-BY-STEP:")
+    print("STEP-BY-STEP:")
     print("    1. Sign up / log in at the URL above.")
     print("    2. Copy your API token from the dashboard (top-right corner).")
     print("    3. Paste it below (hidden).")
@@ -6392,8 +6389,7 @@ def _ensure_qbraid_login(cfg, force_interactive: bool = False) -> bool:
     print("  QBRAID AUTHENTICATION REQUIRED")
     print("=" * 72)
     _open_browser("https://account.qbraid.com/account/api-keys", "Opening qBraid API keys...")
-    print("
-  STEP-BY-STEP:")
+    print("STEP-BY-STEP:")
     print("    1. Log in / sign up at the URL above.")
     print("    2. Go to Account → API Keys.")
     print("    3. Generate a new key and paste it below (hidden).")
@@ -6432,8 +6428,7 @@ def _ensure_xanadu_login(cfg, force_interactive: bool = False) -> bool:
     print("  XANADU CLOUD AUTHENTICATION REQUIRED")
     print("=" * 72)
     _open_browser("https://cloud.xanadu.ai/", "Opening Xanadu Cloud...")
-    print("
-  Get your API key from the Xanadu Cloud dashboard and paste below.")
+    print("Get your API key from the Xanadu Cloud dashboard and paste below.")
     token = _input_hidden("  Xanadu API key (hidden): ")
     if token:
         cfg.xanadu_token = token
@@ -6695,7 +6690,7 @@ def _list_dwave_solvers(cfg) -> list:
                 qubits = props.get('qubits', []) if isinstance(props, dict) else []
                 num_qubits = len(qubits) if isinstance(qubits, list) else 'N/A'
                 category = props.get('category', 'qpu') if isinstance(props, dict) else 'qpu'
-                status = 'online' if s.online if hasattr(s, 'online') else 'unknown'
+                status = 'online' if getattr(s, 'online', False) else 'unknown'
                 backends.append({
                     'name': name,
                     'status': status,
@@ -6737,7 +6732,7 @@ def _list_braket_devices(cfg) -> list:
             props = d.properties if hasattr(d, 'properties') else {}
             provider = d.provider_name if hasattr(d, 'provider_name') else 'Unknown'
             qubits = props.get('qubitCount', 'N/A') if isinstance(props, dict) else 'N/A'
-            btype = 'Simulator' if d.is_simulator if hasattr(d, 'is_simulator') else 'QPU'
+            btype = 'Simulator' if getattr(d, 'is_simulator', False) else 'QPU'
             backends.append({
                 'name': name,
                 'status': 'online',

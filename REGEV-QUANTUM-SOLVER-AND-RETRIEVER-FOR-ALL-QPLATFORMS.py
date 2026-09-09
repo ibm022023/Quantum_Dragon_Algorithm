@@ -2885,10 +2885,6 @@ def _make_origin_noise_model():
 
 def run_origin_quantum_circuit(prog: Any, cfg: P11Config, n_cbits: int):
 
-    # Auto-discover and select backend
-    chosen = choose_backend_for_platform("origin", cfg)
-    cfg.origin_device = chosen
-
     if cfg.origin_use_qpu:
         counts = _run_origin_qpu(prog, cfg, n_cbits)
     else:
@@ -5232,14 +5228,6 @@ def _run_rigetti_via_openquantum(qc: QuantumCircuit, cfg: P11Config) -> Counter:
 def run_rigetti_qbraid_openquantum(qc: QuantumCircuit, cfg: P11Config) -> Counter:
     """Run Cepheus directly when configured, with linked qBraid fallback."""
 
-    # Auto-discover and select backend
-    chosen = choose_backend_for_platform("ibm", cfg)
-    cfg.ibm_backend = chosen
-
-
-    # Auto-discover and select backend
-    chosen = choose_backend_for_platform("rigetti", cfg)
-    cfg.openquantum_backend = chosen
 
     if not QISKIT_OK:
         raise RuntimeError("Qiskit is required for Rigetti Cepheus access.")
@@ -5389,10 +5377,6 @@ def qiskit_to_quil_abraxas(qc: QuantumCircuit):
 
 def qiskit_to_pytket_abraxas(qc: QuantumCircuit):
     """Convert Qiskit → pytket Circuit via Abraxas or pytket-qiskit bridge."""
-
-    # Auto-discover and select backend
-    chosen = choose_backend_for_platform("iqm", cfg)
-    cfg.iqm_device = chosen
 
     if not TKET_OK:
         raise RuntimeError("pytket not installed")
@@ -5589,9 +5573,6 @@ def _poll_with_spinner(poll_fn, interval=5, timeout=3600, label="Job"):
 
 def run_tket(qc, cfg):
 
-    # Auto-discover and select backend
-    chosen = choose_backend_for_platform("tket", cfg)
-
     if not TKET_OK:
         logger.error("pytket missing"); return None
     try:
@@ -5615,9 +5596,6 @@ def run_tket(qc, cfg):
 
 def run_pennylane(qc, cfg):
 
-    # Auto-discover and select backend
-    chosen = choose_backend_for_platform("pennylane", cfg)
-
     if not PENNYLANE_OK:
         logger.error("pennylane missing"); return None
     try:
@@ -5637,9 +5615,6 @@ def run_pennylane(qc, cfg):
 
 
 def run_cirq(qc, cfg):
-
-    # Auto-discover and select backend
-    chosen = choose_backend_for_platform("cirq", cfg)
 
     if not CIRQ_OK:
         logger.error("cirq missing"); return None
@@ -5663,9 +5638,6 @@ def run_cirq(qc, cfg):
 
 def run_braket(qc, cfg):
 
-    # Auto-discover and select backend
-    chosen = choose_backend_for_platform("braket", cfg)
-
     if not BRAKET_OK:
         logger.error("qiskit-braket-provider missing"); return None
     try:
@@ -5683,9 +5655,6 @@ def run_braket(qc, cfg):
 
 def run_cudaq(qc, cfg):
 
-    # Auto-discover and select backend
-    chosen = choose_backend_for_platform("cudaq", cfg)
-
     if not CUDA_OK:
         logger.error("cudaq missing"); return None
     try:
@@ -5700,9 +5669,6 @@ def run_cudaq(qc, cfg):
 
 
 def run_bluequbit(qc, cfg):
-
-    # Auto-discover and select backend
-    chosen = choose_backend_for_platform("bluequbit", cfg)
 
     if not BLUEQUBIT_OK:
         logger.error("bluequbit not installed. pip install bluequbit"); return None
@@ -5736,10 +5702,6 @@ def run_bluequbit(qc, cfg):
 
 def run_nexus(qc, cfg):
     """Quantinuum via qnexus (cloud) → falls back to pytket-quantinuum local emulator."""
-
-    # Auto-discover and select backend
-    chosen = choose_backend_for_platform("quantinuum", cfg)
-    cfg.helios_system_name = chosen
 
     if NEXUS_OK:
         try:
@@ -5814,10 +5776,6 @@ def run_xanadu(qc, cfg):
     """Xanadu access via PennyLane / Strawberry Fields simulators.
     Borealis (photonic QPU) is retired — simulator-only."""
 
-    # Auto-discover and select backend
-    chosen = choose_backend_for_platform("xanadu", cfg)
-    cfg.xanadu_device = chosen
-
     dev = cfg.xanadu_device.lower()
     if dev in ("borealis", "aws.borealis"):
         logger.error("Xanadu Borealis has been retired. No real-hardware path exists.")
@@ -5845,9 +5803,6 @@ def run_xanadu(qc, cfg):
 def run_quera(qc, cfg):
     """QuEra Aquila on AWS Braket. NOTE: Aquila is Analog Hamiltonian Simulation (AHS),
     not gate-based. This runner will fail for generic gate circuits."""
-
-    # Auto-discover and select backend
-    chosen = choose_backend_for_platform("quera", cfg)
 
     logger.warning("QuEra Aquila is a neutral-atom AHS device. Standard gate-based Qiskit circuits CANNOT be executed directly.")
     if not BRAKET_OK:
@@ -5881,9 +5836,6 @@ def run_pasqal(qc, cfg):
     """Pasqal cloud via pasqal-cloud SDK. NOTE: Pasqal hardware uses Pulser sequences.
     Generic Qiskit→Pulser auto-conversion is NOT implemented here; scaffold only."""
 
-    # Auto-discover and select backend
-    chosen = choose_backend_for_platform("pasqal", cfg)
-
     if not PASQAL_OK:
         logger.error("pasqal-cloud not installed. pip install pasqal-cloud"); return None
     logger.warning("Pasqal backends require Pulser sequence conversion. This runner authenticates and lists devices but cannot auto-convert Qiskit circuits.")
@@ -5904,9 +5856,6 @@ def run_pasqal(qc, cfg):
 
 
 def run_qrisp(qc, cfg):
-
-    # Auto-discover and select backend
-    chosen = choose_backend_for_platform("qrisp", cfg)
 
     if not QRISP_OK:
         logger.error("qrisp missing"); return None
@@ -7344,10 +7293,6 @@ def _regev_to_dwave_bqm(cfg: P11Config, delta_powers, basis_powers, bits: int, d
 def run_dwave(qc, cfg):
     """Run Regev lattice search on D-Wave QPU via Ocean SDK."""
 
-    # Auto-discover and select backend
-    chosen = choose_backend_for_platform("dwave", cfg)
-    cfg.dwave_solver = chosen
-
     if not DWAVE_OK:
         logger.error("D-Wave Ocean SDK not installed. pip install dwave-ocean-sdk"); return None
     token = cfg.dwave_token or os.getenv("DWAVE_API_TOKEN")
@@ -7379,10 +7324,6 @@ def run_dwave(qc, cfg):
 
 def run_dwave_hybrid(qc, cfg):
     """Run Regev lattice search on D-Wave Hybrid solver (Kerberos)."""
-
-    # Auto-discover and select backend
-    chosen = choose_backend_for_platform("dwave_hybrid", cfg)
-    cfg.dwave_hybrid_solver = chosen
 
     if not DWAVE_HYBRID_OK:
         logger.error("dwave-hybrid not installed. pip install dwave-hybrid"); return None
@@ -7477,10 +7418,6 @@ def run_helios(qc, cfg):
       5. start_execute_job → wait_for → download_result
     """
 
-    # Auto-discover and select backend
-    chosen = choose_backend_for_platform("helios", cfg)
-    cfg.helios_system_name = chosen
-
     if not HELIOS_OK:
         logger.error("qnexus Helios support not available. pip install qnexus>=0.45"); return None
     try:
@@ -7542,10 +7479,6 @@ def run_selene(qc, cfg):
     Selene is the emulation toolkit; programs are written in Guppy.
     Local path uses guppylang.emulator; cloud path uses qnexus Selene instances.
     """
-
-    # Auto-discover and select backend
-    chosen = choose_backend_for_platform("selene", cfg)
-    cfg.helios_system_name = chosen
 
     if not GUPPY_OK:
         logger.error("guppylang not installed. pip install guppylang"); return None
@@ -8702,8 +8635,6 @@ def interactive_menu() -> P11Config:
         cfg.quantum_access = "ibm_qiskit"
         cfg.backend = "ibm"
         cfg.sdk = "qiskit"
-        chosen = choose_backend_for_platform("ibm", cfg)
-        cfg.ibm_backend = chosen
 
     elif platform == "iqm":
         cfg.quantum_access = "iqm_pytket"
@@ -8741,8 +8672,6 @@ def interactive_menu() -> P11Config:
         cfg.sdk = {"1": "iqm_qiskit", "2": "qiskit_pytket", "3": "pytket", "4": "qrisp"}[engine]
         cfg.quantum_access = {"1": "iqm_official_qiskit", "2": "iqm_qiskit_pytket_legacy",
                               "3": "iqm_native_pytket_legacy", "4": "iqm_qrisp_pytket_legacy"}[engine]
-        chosen = choose_backend_for_platform("iqm", cfg)
-        cfg.iqm_device = chosen
 
     elif platform == "origin":
         if not ORIGIN3_OK:
@@ -8750,8 +8679,6 @@ def interactive_menu() -> P11Config:
         cfg.quantum_access = "originqc_pyqpanda"
         cfg.backend = "origin"
         cfg.sdk = "pyqpanda"
-        chosen = choose_backend_for_platform("origin", cfg)
-        cfg.origin_device = chosen
 
     elif platform == "rigetti":
         print("RIGETTI / OPEN QUANTUM INTEGRATION STATUS")
@@ -8765,16 +8692,12 @@ def interactive_menu() -> P11Config:
         cfg.quantum_access = "rigetti_auto_openquantum_then_qbraid"
         cfg.backend = "rigetti"
         cfg.sdk = "qiskit"
-        chosen = choose_backend_for_platform("rigetti", cfg)
-        cfg.openquantum_backend = chosen
 
     elif platform == "dwave":
         if not DWAVE_OK:
             raise RuntimeError("D-Wave selected, but dwave-ocean-sdk is not installed.")
         cfg.quantum_access = "dwave_ocean"
         cfg.backend = "dwave"
-        chosen = choose_backend_for_platform("dwave", cfg)
-        cfg.dwave_solver = chosen
 
     elif platform == "braket":
         if not BRAKET_OK:
@@ -8782,14 +8705,11 @@ def interactive_menu() -> P11Config:
         cfg.quantum_access = "aws_braket"
         cfg.backend = "braket"
         cfg.sdk = "braket"
-        chosen = choose_backend_for_platform("braket", cfg)
 
     elif platform == "quantinuum":
         cfg.quantum_access = "quantinuum_pytket"
         cfg.backend = "quantinuum"
         cfg.sdk = "pytket"
-        chosen = choose_backend_for_platform("quantinuum", cfg)
-        cfg.helios_system_name = chosen
 
     elif platform == "helios":
         if not HELIOS_OK:
@@ -8797,15 +8717,11 @@ def interactive_menu() -> P11Config:
         cfg.quantum_access = "quantinuum_helios"
         cfg.backend = "helios"
         cfg.sdk = "guppy"
-        chosen = choose_backend_for_platform("helios", cfg)
-        cfg.helios_system_name = chosen
 
     elif platform == "selene":
         cfg.quantum_access = "quantinuum_selene"
         cfg.backend = "selene"
         cfg.sdk = "guppy"
-        chosen = choose_backend_for_platform("selene", cfg)
-        cfg.helios_system_name = chosen
 
     elif platform == "pennylane":
         if not PENNYLANE_OK:
@@ -8813,7 +8729,6 @@ def interactive_menu() -> P11Config:
         cfg.quantum_access = "pennylane"
         cfg.backend = "pennylane"
         cfg.sdk = "pennylane"
-        chosen = choose_backend_for_platform("pennylane", cfg)
 
     elif platform == "cirq":
         if not CIRQ_OK:
@@ -8821,7 +8736,6 @@ def interactive_menu() -> P11Config:
         cfg.quantum_access = "google_cirq"
         cfg.backend = "cirq"
         cfg.sdk = "cirq"
-        chosen = choose_backend_for_platform("cirq", cfg)
 
     elif platform == "cudaq":
         if not CUDA_OK:
@@ -8829,7 +8743,6 @@ def interactive_menu() -> P11Config:
         cfg.quantum_access = "nvidia_cudaq"
         cfg.backend = "cudaq"
         cfg.sdk = "cudaq"
-        chosen = choose_backend_for_platform("cudaq", cfg)
 
     elif platform == "bluequbit":
         if not BLUEQUBIT_OK:
@@ -8837,14 +8750,11 @@ def interactive_menu() -> P11Config:
         cfg.quantum_access = "bluequbit"
         cfg.backend = "bluequbit"
         cfg.sdk = "bluequbit"
-        chosen = choose_backend_for_platform("bluequbit", cfg)
 
     elif platform == "xanadu":
         cfg.quantum_access = "xanadu"
         cfg.backend = "xanadu"
         cfg.sdk = "pennylane"
-        chosen = choose_backend_for_platform("xanadu", cfg)
-        cfg.xanadu_device = chosen
 
     elif platform == "quera":
         if not BRAKET_OK:
@@ -8852,7 +8762,6 @@ def interactive_menu() -> P11Config:
         cfg.quantum_access = "quera_braket"
         cfg.backend = "quera"
         cfg.sdk = "braket"
-        chosen = choose_backend_for_platform("quera", cfg)
 
     elif platform == "pasqal":
         if not PASQAL_OK:
@@ -8860,7 +8769,6 @@ def interactive_menu() -> P11Config:
         cfg.quantum_access = "pasqal"
         cfg.backend = "pasqal"
         cfg.sdk = "pasqal"
-        chosen = choose_backend_for_platform("pasqal", cfg)
 
     elif platform == "qrisp":
         if not QRISP_OK:
@@ -8868,7 +8776,6 @@ def interactive_menu() -> P11Config:
         cfg.quantum_access = "qrisp"
         cfg.backend = "qrisp"
         cfg.sdk = "qrisp"
-        chosen = choose_backend_for_platform("qrisp", cfg)
 
     elif platform == "tket":
         if not TKET_OK:
@@ -8876,7 +8783,6 @@ def interactive_menu() -> P11Config:
         cfg.quantum_access = "tket"
         cfg.backend = "tket"
         cfg.sdk = "pytket"
-        chosen = choose_backend_for_platform("tket", cfg)
 
     elif platform == "aer":
         if not AER_OK:
@@ -8993,25 +8899,59 @@ def interactive_menu() -> P11Config:
 
     print("\n" + "─" * 78)
     print("PROVIDER SETTINGS")
+
+    # ── IBM Quantum ──
     if cfg.backend == "ibm":
-        cfg.ibm_backend = input("IBM backend [ibm_fez]: ").strip() or "ibm_fez"
         cfg.ibm_token = os.getenv("IBM_QUANTUM_TOKEN", "") or input(
             "IBM Quantum token (or set IBM_QUANTUM_TOKEN): "
         ).strip()
         cfg.ibm_crn = os.getenv("IBM_QUANTUM_CRN", "") or input(
             "IBM CRN / instance [optional]: "
         ).strip()
+        # Now that we have the token, discover available backends
+        chosen = choose_backend_for_platform("ibm", cfg)
+        cfg.ibm_backend = chosen
+
+    # ── IQM Resonance ──
     elif cfg.backend == "iqm":
         cfg.iqm_server_url = os.getenv("IQM_SERVER_URL", "") or input(
             "IQM server URL [https://resonance.iqm.tech/]: "
         ).strip() or "https://resonance.iqm.tech/"
-        cfg.iqm_device = os.getenv("IQM_QUANTUM_COMPUTER", "") or input(
-            "IQM quantum computer [emerald; alternatives depend on your account]: "
-        ).strip() or "emerald"
         cfg.iqm_token = os.getenv("IQM_TOKEN", "") or input(
             "IQM token (or set IQM_TOKEN): "
         ).strip()
+        cfg.iqm_device = os.getenv("IQM_QUANTUM_COMPUTER", "") or input(
+            "IQM quantum computer [emerald]: "
+        ).strip() or "emerald"
+        chosen = choose_backend_for_platform("iqm", cfg)
+        cfg.iqm_device = chosen
+
+    # ── Origin Quantum ──
+    elif cfg.backend == "origin":
+        cfg.origin_token = os.getenv("ORIGINQC_TOKEN", "") or input(
+            "OriginQC token (or set ORIGINQC_TOKEN; blank for local simulator): "
+        ).strip()
+        cfg.origin_use_qpu = _ask_yes_no("Use a real OriginQC QPU?", bool(cfg.origin_token))
+        cfg.origin_shots = cfg.shots
+        if cfg.origin_use_qpu:
+            if not cfg.origin_token:
+                raise RuntimeError("An OriginQC token is required for QPU access.")
+            chosen = choose_backend_for_platform("origin", cfg)
+            cfg.origin_device = chosen
+            cfg.origin_capacity_max_wait = int(
+                input("Capacity wait timeout in seconds [120]: ").strip() or "120"
+            )
+            cfg.origin_capacity_poll_interval = int(
+                input("Capacity polling interval in seconds [15]: ").strip() or "15"
+            )
+        else:
+            cfg.origin_simulator = input(
+                "Origin simulator [cpu | gpu | partial | noise_cpu] [cpu]: "
+            ).strip().lower() or "cpu"
+
+    # ── Rigetti / Open Quantum ──
     elif cfg.backend == "rigetti":
+        import getpass as _getpass
         print("Rigetti access mode:")
         print("  auto        — direct Open Quantum first when credentials exist; qBraid fallback")
         print("  qbraid      — require qBraid linked route")
@@ -9026,16 +8966,9 @@ def interactive_menu() -> P11Config:
         if cfg.rigetti_access_mode not in ("auto", "qbraid", "openquantum"):
             raise ValueError("Mode must be auto, qbraid, or openquantum.")
 
-        import getpass as _getpass
-        print("\nqBraid linked route: link Open Quantum once in your qBraid profile.")
-        print("Linked Open Quantum jobs use Open Quantum credits; qBraid credits are not required.")
-        print("Only the qBraid API key is sent to qBraid; never the OQ client secret.")
         cfg.qbraid_api_key = os.getenv("QBRAID_API_KEY", "") or _getpass.getpass(
             "qBraid API key [optional in qBraid Lab / direct mode]: "
         ).strip()
-
-        print("\nDirect Open Quantum Core Scheduler route/fallback:")
-        print("The s_... SDK value is the Client ID and must be paired with its secret.")
         cfg.openquantum_client_id = os.getenv("OPENQUANTUM_CLIENT_ID", "")
         if not cfg.openquantum_client_id and cfg.rigetti_access_mode != "qbraid":
             cfg.openquantum_client_id = input(
@@ -9050,40 +8983,115 @@ def interactive_menu() -> P11Config:
             cfg.openquantum_client_id and cfg.openquantum_client_secret
         ):
             raise RuntimeError(
-                "openquantum mode requires both OPENQUANTUM_CLIENT_ID and "
-                "OPENQUANTUM_CLIENT_SECRET."
+                "openquantum mode requires both OPENQUANTUM_CLIENT_ID and OPENQUANTUM_CLIENT_SECRET."
             )
         cfg.openquantum_organization_id = os.getenv(
             "OPENQUANTUM_ORGANIZATION_ID", ""
         ) or input("Open Quantum organization UUID [optional/auto]: ").strip()
-
-        # Official identifiers are fixed here to avoid mixing qBraid, Azure,
-        # direct Rigetti QCS, and Open Quantum naming schemes.
         cfg.qbraid_openquantum_device = "openquantum:rigetti:qpu:cepheus-1-108q"
         cfg.openquantum_backend = "rigetti:cepheus-1-108q"
         cfg.rigetti_require_dual_auth = False
-        print(f"qBraid device: {cfg.qbraid_openquantum_device}")
-        print(f"Open Quantum backend: {cfg.openquantum_backend}")
-    else:
-        cfg.origin_token = os.getenv("ORIGINQC_TOKEN", "") or input(
-            "OriginQC token (or set ORIGINQC_TOKEN; blank for local simulator): "
+        chosen = choose_backend_for_platform("rigetti", cfg)
+        cfg.openquantum_backend = chosen
+
+    # ── D-Wave ──
+    elif cfg.backend == "dwave":
+        cfg.dwave_token = os.getenv("DWAVE_API_TOKEN", "") or input(
+            "D-Wave API token (or set DWAVE_API_TOKEN): "
         ).strip()
-        cfg.origin_use_qpu = _ask_yes_no("Use a real OriginQC QPU?", bool(cfg.origin_token))
-        cfg.origin_shots = cfg.shots
-        if cfg.origin_use_qpu:
-            if not cfg.origin_token:
-                raise RuntimeError("An OriginQC token is required for QPU access.")
-            cfg.origin_device = input("Origin device [WK_C180]: ").strip() or "WK_C180"
-            cfg.origin_capacity_max_wait = int(
-                input("Capacity wait timeout in seconds [120]: ").strip() or "120"
-            )
-            cfg.origin_capacity_poll_interval = int(
-                input("Capacity polling interval in seconds [15]: ").strip() or "15"
-            )
-        else:
-            cfg.origin_simulator = input(
-                "Origin simulator [cpu | gpu | partial | noise_cpu] [cpu]: "
-            ).strip().lower() or "cpu"
+        cfg.dwave_use_qpu = _ask_yes_no("Use D-Wave QPU?", True)
+        if cfg.dwave_use_qpu and not cfg.dwave_token:
+            raise RuntimeError("D-Wave token required for QPU access.")
+        if cfg.dwave_use_qpu:
+            chosen = choose_backend_for_platform("dwave", cfg)
+            cfg.dwave_solver = chosen
+        cfg.dwave_use_hybrid = _ask_yes_no("Use D-Wave Hybrid solver?", False)
+        if cfg.dwave_use_hybrid:
+            chosen = choose_backend_for_platform("dwave_hybrid", cfg)
+            cfg.dwave_hybrid_solver = chosen
+
+    # ── AWS Braket ──
+    elif cfg.backend == "braket":
+        print("AWS Braket uses your AWS credentials (~/.aws/credentials or env vars).")
+        print("Ensure AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY are set.")
+        chosen = choose_backend_for_platform("braket", cfg)
+
+    # ── Quantinuum H-Series (pytket) ──
+    elif cfg.backend == "quantinuum":
+        cfg.helios_system_name = os.getenv("QUANTINUUM_SYSTEM", "") or input(
+            "Quantinuum system [H1-1 | H1-2 | H2-1 | Helios-1E]: "
+        ).strip() or "Helios-1E"
+        chosen = choose_backend_for_platform("quantinuum", cfg)
+        cfg.helios_system_name = chosen
+
+    # ── Quantinuum Helios (qnexus + Guppy) ──
+    elif cfg.backend == "helios":
+        print("Quantinuum Helios requires qnexus authentication.")
+        chosen = choose_backend_for_platform("helios", cfg)
+        cfg.helios_system_name = chosen
+
+    # ── Quantinuum Selene ──
+    elif cfg.backend == "selene":
+        print("Quantinuum Selene emulator selected.")
+        chosen = choose_backend_for_platform("selene", cfg)
+        cfg.helios_system_name = chosen
+
+    # ── PennyLane ──
+    elif cfg.backend == "pennylane":
+        print("PennyLane uses plugin-specific credentials.")
+        chosen = choose_backend_for_platform("pennylane", cfg)
+
+    # ── Google Cirq ──
+    elif cfg.backend == "cirq":
+        print("Google Cirq / Quantum Engine uses gcloud credentials.")
+        chosen = choose_backend_for_platform("cirq", cfg)
+
+    # ── NVIDIA CUDA-Q ──
+    elif cfg.backend == "cudaq":
+        print("CUDA-Q uses local GPU or remote MQPU credentials.")
+        chosen = choose_backend_for_platform("cudaq", cfg)
+
+    # ── BlueQubit ──
+    elif cfg.backend == "bluequbit":
+        cfg.bluequbit_token = os.getenv("BLUEQUBIT_API_TOKEN", "") or input(
+            "BlueQubit API token (or set BLUEQUBIT_API_TOKEN): "
+        ).strip()
+        if not cfg.bluequbit_token:
+            raise RuntimeError("BlueQubit API token required.")
+        chosen = choose_backend_for_platform("bluequbit", cfg)
+
+    # ── Xanadu ──
+    elif cfg.backend == "xanadu":
+        print("Xanadu Borealis has been retired. Only simulators are available.")
+        chosen = choose_backend_for_platform("xanadu", cfg)
+        cfg.xanadu_device = chosen
+
+    # ── QuEra ──
+    elif cfg.backend == "quera":
+        print("QuEra Aquila on AWS Braket. Ensure AWS credentials are configured.")
+        chosen = choose_backend_for_platform("quera", cfg)
+
+    # ── Pasqal ──
+    elif cfg.backend == "pasqal":
+        print("Pasqal Cloud credentials are configured via environment or ~/.pasqal/config.")
+        chosen = choose_backend_for_platform("pasqal", cfg)
+
+    # ── Qrisp ──
+    elif cfg.backend == "qrisp":
+        print("Qrisp framework selected.")
+        chosen = choose_backend_for_platform("qrisp", cfg)
+
+    # ── TKET ──
+    elif cfg.backend == "tket":
+        print("TKET selected. Use pytket extensions for hardware access.")
+        chosen = choose_backend_for_platform("tket", cfg)
+
+    # ── Qiskit Aer (local simulator) ──
+    elif cfg.backend == "aer":
+        print("Qiskit Aer local simulator — no credentials needed.")
+
+    else:
+        raise ValueError(f"Unknown backend: {cfg.backend}")
 
     cfg.json_path = input(
         "JSON result file [unified_quantum_result.json; '-' disables]: "

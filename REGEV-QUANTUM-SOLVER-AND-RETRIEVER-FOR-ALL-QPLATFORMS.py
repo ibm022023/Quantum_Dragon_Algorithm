@@ -31,21 +31,7 @@ input. No API token is embedded in this source file.
 """
 
 from __future__ import annotations
-
 import os, sys, math, time, json, logging, traceback
-import warnings
-# Suppress IQM internal deprecation warnings globally (Pydantic _Instruction/_Circuit)
-warnings.filterwarnings(
-    "ignore",
-    message=".*iqm.station_control.interface.models.circuit._Instruction.*",
-    category=DeprecationWarning,
-)
-warnings.filterwarnings(
-    "ignore",
-    message=".*iqm.station_control.interface.models.circuit._Circuit.*",
-    category=DeprecationWarning,
-)
-
 from dataclasses import dataclass
 import webbrowser
 from fractions import Fraction
@@ -6853,45 +6839,40 @@ def _list_braket_devices(cfg) -> list:
 
 def _list_iqm_backends(cfg) -> list:
     """List available IQM backends via iqm-client."""
-    import warnings
     try:
         from iqm.qiskit_iqm import IQMProvider
+        # IQM Resonance cloud URL
         url = getattr(cfg, 'iqm_url', '') or os.getenv("IQM_SERVER_URL", "https://resonance.iqm.tech")
         token = getattr(cfg, 'iqm_token', '') or os.getenv("IQM_TOKEN", "")
-        # Suppress IQM internal deprecation warnings during backend discovery
-        with warnings.catch_warnings():
-            warnings.filterwarnings(
-                "ignore",
-                message=".*iqm.station_control.interface.models.circuit._Instruction.*",
-                category=DeprecationWarning,
-            )
-            warnings.filterwarnings(
-                "ignore",
-                message=".*iqm.station_control.interface.models.circuit._Circuit.*",
-                category=DeprecationWarning,
-            )
-            provider = IQMProvider(url, token=token)
-            backends = []
-            for name in provider.backends():
-                b = provider.get_backend(name)
-                num_qubits = b.num_qubits if hasattr(b, 'num_qubits') else 'N/A'
-                backends.append({
-                    'name': name,
-                    'status': 'online',
-                    'qubits': num_qubits,
-                    'pending_jobs': 'N/A',
-                    'type': 'QPU',
-                    'recommended': name in ['garnet', 'emerald'],
-                })
+        provider = IQMProvider(url, token=token)
+        backends = []
+        for name in provider.backends():
+            b = provider.get_backend(name)
+            num_qubits = b.num_qubits if hasattr(b, 'num_qubits') else 'N/A'
+            backends.append({
+                'name': name,
+                'status': 'online',
+                'qubits': num_qubits,
+                'pending_jobs': 'N/A',
+                'type': 'QPU',
+                'recommended': name in ['garnet', 'emerald'],
+            })
         return sorted(backends, key=lambda x: (not x['recommended'], x['name']))
     except Exception as e:
         logger.warning(f"IQM backend discovery failed: {e}")
+        # 2025-2026 IQM verified backend names
         return [
             {'name': 'garnet', 'status': 'online', 'qubits': 20, 'pending_jobs': 'N/A', 'type': 'QPU', 'recommended': False},
             {'name': 'emerald', 'status': 'online', 'qubits': 54, 'pending_jobs': 'N/A', 'type': 'QPU', 'recommended': True},
             {'name': 'garnet-sim', 'status': 'online', 'qubits': 20, 'pending_jobs': 'N/A', 'type': 'Simulator', 'recommended': False},
             {'name': 'iqm_simulator', 'status': 'online', 'qubits': 20, 'pending_jobs': 'N/A', 'type': 'Simulator', 'recommended': False},
         ]
+
+
+# ────────────────────────────────────────────────────────────────────────────
+# RIGETTI — Backend Discovery (QCS / pyQuil)
+# ─────────────────────────────────────────────────────────────────────────────
+
 def _list_rigetti_backends(cfg) -> list:
     """List available Rigetti QCS backends."""
     try:
@@ -9039,6 +9020,8 @@ def interactive_menu() -> P11Config:
         cfg.iqm_device = os.getenv("IQM_QUANTUM_COMPUTER", "") or input(
             "IQM quantum computer [emerald]: "
         ).strip() or "emerald"
+        chosen = choose_backend_for_platform("iqm", cfg)
+        cfg.iqm_device = chosen
 
     # ── Origin Quantum ──
     elif cfg.backend == "origin":

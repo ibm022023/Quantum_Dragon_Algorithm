@@ -715,7 +715,7 @@ class P11Config:
     approx_threshold: int = 4
     # ── v3: HalfGCD inversion + MBU + Fibonacci prep ─────────────────────
     use_halfgcd_inv: bool = True       # HalfGCD-style inversion (Schrottenloher)
-    use_mbu: bool = True               # Measurement-based uncomputation (Gidney/Google)
+    use_mbu: bool = False              # Measurement-based uncomputation (Gidney/Google)
     use_fibonacci_prep: bool = True    # Fibonacci-exponentiation prep (Ragavan-Vaikuntanathan)
     use_windowed_oracle: bool = True   # Windowed scalar-mult oracle (~2× fewer adder calls)
     use_solinas_reduction: bool = True # Fast mod-p reduction exploiting secp256k1 Solinas form

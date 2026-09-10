@@ -22,6 +22,10 @@ Startup modes:
   1. Run the complete solver and submit a new quantum job.
   2. Retrieve and post-process an already submitted provider job.
 
+DeprecationWarning: `iqm.station_control.interface.models.circuit._Instruction` is deprecated since 2025-11-05, it may be removed from the codebase in the next major release. Use `iqm.pulse.CircuitOperation` instead.return cls.__pydantic_validator__.validate_json(/home/codespace/.python/current/lib/python3.14/site-packages/pydantic/main.py:766: DeprecationWarning: `iqm.station_control.interface.models.circuit._Circuit` is deprecated since 2025-11-05, it may be removed from the codebase in the next major release. Use `iqm.pulse.Circuit` instead.return cls.__pydantic_validator__.validate_json
+
+* THIS WARNING FOR IQM-ACCESS IS AVOIDED IN OLDER VERSION RegeV-Quantum-Solver-And-retriever-V8.py *
+https://raw.githubusercontent.com/threealgos/Quantum_Dragon_Algorithm/refs/heads/main/RegeV-Quantum-Solver-And-retriever-V8.py
 Security note: credentials are read from environment variables or interactive
 input. No API token is embedded in this source file.
 """
